@@ -60,7 +60,7 @@ func pruneMessages() {
 	var size float64 // use float64 for rqlite compatibility
 
 	// prune using `--max` if set
-	if config.MaxMessages > 0 && CountTotal() > uint64(config.MaxMessages) {
+	if config.MaxMessages > 0 && CountTotal([]string{}) > uint64(config.MaxMessages) {
 		offset := config.MaxMessages
 		if config.DemoMode {
 			offset = 500

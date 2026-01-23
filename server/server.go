@@ -343,7 +343,7 @@ func apiWebsocket(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
 	w.Header().Set("Access-Control-Allow-Headers", "*")
 	websockets.ServeWs(websockets.MessageHub, w, r)
-	storage.BroadcastMailboxStats()
+	storage.BroadcastMailboxStats(storage.GetMailboxes(r))
 }
 
 // Wrapper to artificially inject a basePath to the swagger.json if a webroot has been specified

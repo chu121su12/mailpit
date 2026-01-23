@@ -55,6 +55,13 @@ func ReleaseMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	reader := bytes.NewReader(msg)
+	_, _, err = storage.GetMailHeader(storage.GetMailboxes(r), id, reader)
+	if err != nil {
+		tools.BasicAuthResponse(w)
+		return
+	}
+
 	decoder := json.NewDecoder(r.Body)
 
 	var data struct {
@@ -105,7 +112,6 @@ func ReleaseMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reader := bytes.NewReader(msg)
 	m, err := mail.ReadMessage(reader)
 	if err != nil {
 		httpError(w, err.Error())

@@ -26,7 +26,7 @@ func TestTags(t *testing.T) {
 		ids := []string{}
 
 		for i := 0; i < 10; i++ {
-			id, err := Store(&testMimeEmail, nil)
+			id, err := Store([]string{}, &testMimeEmail, nil)
 			if err != nil {
 				t.Log("error ", err)
 				t.Fail()
@@ -42,7 +42,7 @@ func TestTags(t *testing.T) {
 		}
 
 		for i := 0; i < 10; i++ {
-			message, err := GetMessage(ids[i])
+			message, err := GetMessage([]string{}, ids[i])
 			if err != nil {
 				t.Log("error ", err)
 				t.Fail()
@@ -53,13 +53,13 @@ func TestTags(t *testing.T) {
 			}
 		}
 
-		if err := DeleteAllMessages(); err != nil {
+		if err := DeleteAllMessages([]string{}); err != nil {
 			t.Log("error ", err)
 			t.Fail()
 		}
 
 		// test 20 tags
-		id, err := Store(&testMimeEmail, nil)
+		id, err := Store([]string{}, &testMimeEmail, nil)
 		if err != nil {
 			t.Log("error ", err)
 			t.Fail()
@@ -117,16 +117,16 @@ func TestTags(t *testing.T) {
 		}
 
 		// Check deleted message tags also prune the tags database
-		allTags := GetAllTags()
+		allTags := GetAllTags([]string{})
 		assertEqual(t, "", strings.Join(allTags, "|"), "Tags did not delete as expected")
 
-		if err := DeleteAllMessages(); err != nil {
+		if err := DeleteAllMessages([]string{}); err != nil {
 			t.Log("error ", err)
 			t.Fail()
 		}
 
 		// test 20 tags
-		id, err = Store(&testTagEmail, nil)
+		id, err = Store([]string{}, &testTagEmail, nil)
 		if err != nil {
 			t.Log("error ", err)
 			t.Fail()
@@ -151,11 +151,11 @@ func TestUsernameAutoTagging(t *testing.T) {
 
 	t.Run("Auto-tagging enabled", func(t *testing.T) {
 		config.TagsUsername = true
-		id, err := Store(&testTextEmail, &username)
+		id, err := Store([]string{}, &testTextEmail, &username)
 		if err != nil {
 			t.Fatalf("Store failed: %v", err)
 		}
-		msg, err := GetMessage(id)
+		msg, err := GetMessage([]string{}, id)
 		if err != nil {
 			t.Fatalf("GetMessage failed: %v", err)
 		}
@@ -173,11 +173,11 @@ func TestUsernameAutoTagging(t *testing.T) {
 
 	t.Run("Auto-tagging disabled", func(t *testing.T) {
 		config.TagsUsername = false
-		id, err := Store(&testTextEmail, &username)
+		id, err := Store([]string{}, &testTextEmail, &username)
 		if err != nil {
 			t.Fatalf("Store failed: %v", err)
 		}
-		msg, err := GetMessage(id)
+		msg, err := GetMessage([]string{}, id)
 		if err != nil {
 			t.Fatalf("GetMessage failed: %v", err)
 		}

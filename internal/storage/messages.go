@@ -30,7 +30,7 @@ import (
 // Store will save an email to the database tables.
 // The username is the authentication username of either the SMTP or HTTP client (blank for none).
 // Returns the database ID of the saved message.
-func Store(body *[]byte, username *string) (string, error) {
+func Store(mailbox []string, body *[]byte, username *string) (string, error) {
 	parser := enmime.NewParser(enmime.DisableCharacterDetection(true))
 
 	// Parse message body with enmime
@@ -198,25 +198,27 @@ func Store(body *[]byte, username *string) (string, error) {
 	c.Tags = setTags
 	c.Snippet = snippet
 
-	websockets.Broadcast("new", c)
-	webhook.Send(c)
-
 	dbLastAction = time.Now()
 
-	BroadcastMailboxStats()
-
 	logger.Log().Debugf("[db] saved message %s (%d bytes)", id, size)
+
+	if canSend(mailbox, c.To) {
+		websockets.Broadcast("new", c)
+		webhook.Send(c)
+
+		BroadcastMailboxStats(mailbox)
+	}
 
 	return id, nil
 }
 
 // List returns a subset of messages from the mailbox,
 // sorted latest to oldest
-func List(start int, beforeTS int64, limit int) ([]MessageSummary, error) {
+func List(mailbox []string, start int, beforeTS int64, limit int) ([]MessageSummary, error) {
 	results := []MessageSummary{}
 	tsStart := time.Now()
 
-	q := sqlf.From(tenant("mailbox") + " m").
+	q := mbStmtFilter(mailbox, sqlf.From(tenant("mailbox")+" m")).
 		Select(`m.Created, m.ID, m.MessageID, m.Subject, m.Metadata, m.Size, m.Attachments, m.Read, m.Snippet`).
 		OrderBy("m.Created DESC")
 
@@ -293,25 +295,15 @@ func List(start int, beforeTS int64, limit int) ([]MessageSummary, error) {
 
 // GetMessage returns a Message generated from the mailbox_data collection.
 // If the message lacks a date header, then the received datetime is used.
-func GetMessage(id string) (*Message, error) {
+func GetMessage(mailbox []string, id string) (*Message, error) {
 	raw, err := GetMessageRaw(id)
 	if err != nil {
 		return nil, err
 	}
 
-	r := bytes.NewReader(raw)
-
-	parser := enmime.NewParser(enmime.DisableCharacterDetection(true))
-
-	env, err := parser.ReadEnvelope(r)
+	env, meta, err := GetMailHeader(mailbox, id, bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
-	}
-
-	// Load metadata from DB
-	meta, err := GetMetadata(id)
-	if err != nil {
-		meta = Metadata{}
 	}
 
 	from := meta.From
@@ -334,7 +326,7 @@ func GetMessage(id string) (*Message, error) {
 	date, err := env.Date()
 	if err != nil {
 		// return received datetime when message does not contain a date header
-		q := sqlf.From(tenant("mailbox")).
+		q := mbStmtFilter(mailbox, sqlf.From(tenant("mailbox"))).
 			Select(`Created`).
 			Where(`ID = ?`, id)
 
@@ -406,7 +398,7 @@ func GetMessage(id string) (*Message, error) {
 	}
 
 	// mark message as read
-	if err := MarkRead([]string{id}); err != nil {
+	if err := MarkRead(mailbox, []string{id}); err != nil {
 		return &obj, err
 	}
 
@@ -458,17 +450,13 @@ func GetMessageRaw(id string) ([]byte, error) {
 }
 
 // GetAttachmentPart returns an *enmime.Part (attachment or inline) from a message
-func GetAttachmentPart(id, partID string) (*enmime.Part, error) {
+func GetAttachmentPart(mailbox []string, id, partID string) (*enmime.Part, error) {
 	raw, err := GetMessageRaw(id)
 	if err != nil {
 		return nil, err
 	}
 
-	r := bytes.NewReader(raw)
-
-	parser := enmime.NewParser(enmime.DisableCharacterDetection(true))
-
-	env, err := parser.ReadEnvelope(r)
+	env, _, err := GetMailHeader(mailbox, id, bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
@@ -529,12 +517,12 @@ func LatestID(r *http.Request) (string, error) {
 
 	search := strings.TrimSpace(r.URL.Query().Get("query"))
 	if search != "" {
-		messages, _, err = Search(search, r.URL.Query().Get("tz"), 0, 0, 1)
+		messages, _, err = Search(GetMailboxes(r), search, r.URL.Query().Get("tz"), 0, 0, 1)
 		if err != nil {
 			return "", err
 		}
 	} else {
-		messages, err = List(0, 0, 1)
+		messages, err = List(GetMailboxes(r), 0, 0, 1)
 		if err != nil {
 			return "", err
 		}
@@ -547,9 +535,9 @@ func LatestID(r *http.Request) (string, error) {
 }
 
 // MarkRead will mark a message as read
-func MarkRead(ids []string) error {
+func MarkRead(mailbox []string, ids []string) error {
 	for _, id := range ids {
-		_, err := sqlf.Update(tenant("mailbox")).
+		_, err := mbStmtFilter(mailbox, sqlf.Update(tenant("mailbox"))).
 			Set("Read", 1).
 			Where("ID = ?", id).
 			ExecAndClose(context.Background(), db)
@@ -566,19 +554,19 @@ func MarkRead(ids []string) error {
 		websockets.Broadcast("update", d)
 	}
 
-	BroadcastMailboxStats()
+	BroadcastMailboxStats(mailbox)
 
 	return nil
 }
 
 // MarkAllRead will mark all messages as read
-func MarkAllRead() error {
+func MarkAllRead(mailbox []string) error {
 	var (
 		start = time.Now()
-		total = CountUnread()
+		total = CountUnread(mailbox)
 	)
 
-	_, err := sqlf.Update(tenant("mailbox")).
+	_, err := mbStmtFilter(mailbox, sqlf.Update(tenant("mailbox"))).
 		Set("Read", 1).
 		Where("Read = ?", 0).
 		ExecAndClose(context.Background(), db)
@@ -589,7 +577,7 @@ func MarkAllRead() error {
 	elapsed := time.Since(start)
 	logger.Log().Debugf("[db] marked %v messages as read in %s", total, elapsed)
 
-	BroadcastMailboxStats()
+	BroadcastMailboxStats(mailbox)
 
 	dbLastAction = time.Now()
 
@@ -597,10 +585,10 @@ func MarkAllRead() error {
 }
 
 // MarkAllUnread will mark all messages as unread
-func MarkAllUnread() error {
+func MarkAllUnread(mailbox []string) error {
 	var (
 		start = time.Now()
-		total = CountRead()
+		total = CountRead(mailbox)
 	)
 
 	_, err := sqlf.Update(tenant("mailbox")).
@@ -614,7 +602,7 @@ func MarkAllUnread() error {
 	elapsed := time.Since(start)
 	logger.Log().Debugf("[db] marked %v messages as unread in %s", total, elapsed)
 
-	BroadcastMailboxStats()
+	BroadcastMailboxStats(mailbox)
 
 	dbLastAction = time.Now()
 
@@ -622,7 +610,7 @@ func MarkAllUnread() error {
 }
 
 // MarkUnread will mark a message as unread
-func MarkUnread(ids []string) error {
+func MarkUnread(mailbox []string, ids []string) error {
 	for _, id := range ids {
 		_, err := sqlf.Update(tenant("mailbox")).
 			Set("Read", 0).
@@ -643,13 +631,13 @@ func MarkUnread(ids []string) error {
 		websockets.Broadcast("update", d)
 	}
 
-	BroadcastMailboxStats()
+	BroadcastMailboxStats(mailbox)
 
 	return nil
 }
 
 // DeleteMessages deletes one or more messages in bulk
-func DeleteMessages(ids []string) error {
+func DeleteMessages(mailbox []string, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -661,30 +649,35 @@ func DeleteMessages(ids []string) error {
 		args[i] = id
 	}
 
-	sql := fmt.Sprintf(`SELECT ID, Size FROM %s WHERE  ID IN (?%s)`, tenant("mailbox"), strings.Repeat(",?", len(args)-1)) // #nosec
-	rows, err := db.Query(sql, args...)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = rows.Close() }()
+	q := mbStmtFilter(mailbox, sqlf.From(tenant("mailbox"))).
+		Select(`ID, Size`).
+		Where("ID").In(args)
 
 	toDelete := []string{}
 	var totalSize uint64
+	var rowErr error
 
-	for rows.Next() {
+	if err := q.QueryAndClose(context.Background(), db, func(row *sql.Rows) {
+		if rowErr != nil {
+			return
+		}
+
 		var id string
 		var size float64 // use float64 for rqlite compatibility
 
-		if err := rows.Scan(&id, &size); err != nil {
-			return err
+		if err := row.Scan(&id, &size); err != nil {
+			rowErr = err
+			return
 		}
 
 		toDelete = append(toDelete, id)
 		totalSize = totalSize + uint64(size)
+	}); err != nil {
+		return err
 	}
 
-	if err = rows.Err(); err != nil {
-		return err
+	if rowErr != nil {
+		return rowErr
 	}
 
 	if len(toDelete) == 0 {
@@ -701,10 +694,10 @@ func DeleteMessages(ids []string) error {
 		args[i] = id
 	}
 
-	tables := []string{"mailbox", "mailbox_data", "message_tags"}
+	tables := []string{"mailbox_data", "message_tags", "mailbox"}
 
 	for _, t := range tables {
-		sql = fmt.Sprintf(`DELETE FROM %s WHERE ID IN (?%s)`, tenant(t), strings.Repeat(",?", len(ids)-1))
+		sql := fmt.Sprintf(`DELETE FROM %s WHERE ID IN (?%s)`, tenant(t), strings.Repeat(",?", len(ids)-1))
 
 		_, err = tx.Exec(sql, args...) // #nosec
 		if err != nil {
@@ -732,7 +725,7 @@ func DeleteMessages(ids []string) error {
 
 	logger.Log().Debugf("[db] deleted %d %s in %s", len(toDelete), messages, elapsed)
 
-	BroadcastMailboxStats()
+	BroadcastMailboxStats(mailbox)
 
 	// broadcast individual message deletions
 	for _, id := range toDelete {
@@ -747,13 +740,13 @@ func DeleteMessages(ids []string) error {
 }
 
 // DeleteAllMessages will delete all messages from a mailbox
-func DeleteAllMessages() error {
+func DeleteAllMessages(mailbox []string) error {
 	var (
 		start = time.Now()
 		total int
 	)
 
-	_ = sqlf.From(tenant("mailbox")).
+	_ = mbStmtFilter(mailbox, sqlf.From(tenant("mailbox"))).
 		Select("COUNT(*)").To(&total).
 		QueryRowAndClose(context.TODO(), db)
 
@@ -767,11 +760,15 @@ func DeleteAllMessages() error {
 	// roll back if it fails
 	defer func() { _ = tx.Rollback() }()
 
-	tables := []string{"mailbox", "mailbox_data", "tags", "message_tags"}
+	tables := []string{"mailbox_data", "tags", "message_tags", "mailbox"}
 
 	for _, t := range tables {
-		sql := fmt.Sprintf(`DELETE FROM %s`, tenant(t)) // #nosec
-		_, err := tx.Exec(sql)
+		subquery := mbStmtFilter(mailbox, sqlf.From(tenant("mailbox"))).Select(`ID`)
+
+		_, err := sqlf.DeleteFrom(tenant(t)).
+			Where("ID").SubQuery("IN (", ")", subquery).
+			ExecAndClose(context.Background(), db)
+
 		if err != nil {
 			return err
 		}
@@ -793,7 +790,7 @@ func DeleteAllMessages() error {
 
 	logMessagesDeleted(total)
 
-	BroadcastMailboxStats()
+	BroadcastMailboxStats(mailbox)
 
 	websockets.Broadcast("truncate", nil)
 
@@ -801,10 +798,13 @@ func DeleteAllMessages() error {
 }
 
 // GetMetadata retrieves the metadata for a message by its ID
-func GetMetadata(id string) (Metadata, error) {
+func GetMetadata(mailbox []string, id string) (Metadata, error) {
 	var metadataJSON string
-	row := db.QueryRow(fmt.Sprintf("SELECT Metadata FROM %s WHERE ID = ?", tenant("mailbox")), id)
-	if err := row.Scan(&metadataJSON); err != nil {
+	err := mbStmtFilter(mailbox, sqlf.From(tenant("mailbox"))).
+		Select(`Metadata`).To(&metadataJSON).
+		Where("ID = ?", id).
+		QueryRowAndClose(context.Background(), db)
+	if err != nil {
 		return Metadata{}, err
 	}
 	var meta Metadata

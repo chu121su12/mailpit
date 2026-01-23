@@ -66,7 +66,7 @@ func SaveToDatabase(origin net.Addr, from string, to []string, data []byte, smtp
 		// add unique ID
 		data = append([]byte("Message-ID: <"+messageID+">\r\n"), data...)
 	} else if config.IgnoreDuplicateIDs {
-		if storage.MessageIDExists(messageID) {
+		if storage.MessageIDExists([]string{}, messageID) {
 			logger.Log().Debugf("[smtpd] duplicate message found, ignoring %s", messageID)
 			stats.LogSMTPIgnored()
 			return "", nil
@@ -137,7 +137,7 @@ func SaveToDatabase(origin net.Addr, from string, to []string, data []byte, smtp
 		logger.Log().Debugf("[smtpd] added missing addresses to Bcc header: %s", strings.Join(missingAddresses, ", "))
 	}
 
-	id, err := storage.Store(&data, smtpUser)
+	id, err := storage.Store([]string{}, &data, smtpUser)
 	if err != nil {
 		logger.Log().Errorf("[db] error storing message: %s", err.Error())
 		return "", err

@@ -17,23 +17,23 @@ func TestTextEmailInserts(t *testing.T) {
 	start := time.Now()
 
 	for i := 0; i < testRuns; i++ {
-		if _, err := Store(&testTextEmail, nil); err != nil {
+		if _, err := Store([]string{}, &testTextEmail, nil); err != nil {
 			t.Log("error ", err)
 			t.Fail()
 		}
 	}
 
-	assertEqual(t, CountTotal(), uint64(testRuns), "Incorrect number of text emails stored")
+	assertEqual(t, CountTotal([]string{}), uint64(testRuns), "Incorrect number of text emails stored")
 
 	t.Logf("Inserted %d text emails in %s", testRuns, time.Since(start))
 
 	delStart := time.Now()
-	if err := DeleteAllMessages(); err != nil {
+	if err := DeleteAllMessages([]string{}); err != nil {
 		t.Log("error ", err)
 		t.Fail()
 	}
 
-	assertEqual(t, CountTotal(), uint64(0), "incorrect number of text emails deleted")
+	assertEqual(t, CountTotal([]string{}), uint64(0), "incorrect number of text emails deleted")
 
 	t.Logf("deleted %d text emails in %s", testRuns, time.Since(delStart))
 
@@ -55,23 +55,23 @@ func TestMimeEmailInserts(t *testing.T) {
 		start := time.Now()
 
 		for i := 0; i < testRuns; i++ {
-			if _, err := Store(&testMimeEmail, nil); err != nil {
+			if _, err := Store([]string{}, &testMimeEmail, nil); err != nil {
 				t.Log("error ", err)
 				t.Fail()
 			}
 		}
 
-		assertEqual(t, CountTotal(), uint64(testRuns), "Incorrect number of mime emails stored")
+		assertEqual(t, CountTotal([]string{}), uint64(testRuns), "Incorrect number of mime emails stored")
 
 		t.Logf("Inserted %d text emails in %s", testRuns, time.Since(start))
 
 		delStart := time.Now()
-		if err := DeleteAllMessages(); err != nil {
+		if err := DeleteAllMessages([]string{}); err != nil {
 			t.Log("error ", err)
 			t.Fail()
 		}
 
-		assertEqual(t, CountTotal(), uint64(0), "incorrect number of mime emails deleted")
+		assertEqual(t, CountTotal([]string{}), uint64(0), "incorrect number of mime emails deleted")
 
 		t.Logf("Deleted %d mime emails in %s", testRuns, time.Since(delStart))
 
@@ -95,13 +95,13 @@ func TestRetrieveMimeEmail(t *testing.T) {
 				t.Logf("Testing mime email retrieval (tenant %s)", tenantID)
 			}
 
-			id, err := Store(&testMimeEmail, nil)
+			id, err := Store([]string{}, &testMimeEmail, nil)
 			if err != nil {
 				t.Log("error ", err)
 				t.Fail()
 			}
 
-			msg, err := GetMessage(id)
+			msg, err := GetMessage([]string{}, id)
 			if err != nil {
 				t.Log("error ", err)
 				t.Fail()
@@ -118,14 +118,14 @@ func TestRetrieveMimeEmail(t *testing.T) {
 			assertEqual(t, len(msg.Inline), 1, "incorrect number of inline attachments")
 			assertEqual(t, msg.Inline[0].FileName, "inline-image.jpg", "inline attachment filename does not match")
 
-			attachmentData, err := GetAttachmentPart(id, msg.Attachments[0].PartID)
+			attachmentData, err := GetAttachmentPart([]string{}, id, msg.Attachments[0].PartID)
 			if err != nil {
 				t.Log("error ", err)
 				t.Fail()
 			}
 			assertEqual(t, uint64(len(attachmentData.Content)), msg.Attachments[0].Size, "attachment size does not match")
 
-			inlineData, err := GetAttachmentPart(id, msg.Inline[0].PartID)
+			inlineData, err := GetAttachmentPart([]string{}, id, msg.Inline[0].PartID)
 			if err != nil {
 				t.Log("error ", err)
 				t.Fail()
@@ -152,12 +152,12 @@ func TestMessageSummary(t *testing.T) {
 			t.Logf("Testing message summary (tenant %s)", tenantID)
 		}
 
-		if _, err := Store(&testMimeEmail, nil); err != nil {
+		if _, err := Store([]string{}, &testMimeEmail, nil); err != nil {
 			t.Log("error ", err)
 			t.Fail()
 		}
 
-		summaries, err := List(0, 0, 1)
+		summaries, err := List([]string{}, 0, 0, 1)
 		if err != nil {
 			t.Log("error ", err)
 			t.Fail()
@@ -186,7 +186,7 @@ func BenchmarkImportText(b *testing.B) {
 	defer Close()
 
 	for i := 0; i < b.N; i++ {
-		if _, err := Store(&testTextEmail, nil); err != nil {
+		if _, err := Store([]string{}, &testTextEmail, nil); err != nil {
 			b.Log("error ", err)
 			b.Fail()
 		}
@@ -198,7 +198,7 @@ func BenchmarkImportMime(b *testing.B) {
 	defer Close()
 
 	for i := 0; i < b.N; i++ {
-		if _, err := Store(&testMimeEmail, nil); err != nil {
+		if _, err := Store([]string{}, &testMimeEmail, nil); err != nil {
 			b.Log("error ", err)
 			b.Fail()
 		}
@@ -215,12 +215,12 @@ func TestInlineImageContentIdHandling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read test email: %v", err)
 	}
-	storedMessage, err := Store(&inlineAttachment, nil)
+	storedMessage, err := Store([]string{}, &inlineAttachment, nil)
 	if err != nil {
 		t.Fatal("Failed to store test case 1:", err)
 	}
 
-	msg, err := GetMessage(storedMessage)
+	msg, err := GetMessage([]string{}, storedMessage)
 	if err != nil {
 		t.Fatal("Failed to retrieve test case 1:", err)
 	}
@@ -245,11 +245,11 @@ func TestRegularAttachmentHandling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read test email: %v", err)
 	}
-	storedMessage, err := Store(&regularAttachment, nil)
+	storedMessage, err := Store([]string{}, &regularAttachment, nil)
 	if err != nil {
 		t.Fatal("Failed to store test case 3:", err)
 	}
-	msg, err := GetMessage(storedMessage)
+	msg, err := GetMessage([]string{}, storedMessage)
 	if err != nil {
 		t.Fatal("Failed to retrieve test case 3:", err)
 	}
@@ -279,11 +279,11 @@ func TestMixedAttachmentHandling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read test email: %v", err)
 	}
-	storedMessage, err := Store(&mixedAttachment, nil)
+	storedMessage, err := Store([]string{}, &mixedAttachment, nil)
 	if err != nil {
 		t.Fatal("Failed to store test case 4:", err)
 	}
-	msg, err := GetMessage(storedMessage)
+	msg, err := GetMessage([]string{}, storedMessage)
 	if err != nil {
 		t.Fatal("Failed to retrieve test case 4:", err)
 	}

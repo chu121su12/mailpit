@@ -80,6 +80,9 @@ var (
 	// UIAuthFile for UI & API authentication
 	UIAuthFile string
 
+	// UIUserMailHeader for UI filtering TO: mails based on incoming header
+	UIUserMailHeader string
+
 	// Webroot to define the base path for the UI and API
 	Webroot = "/"
 

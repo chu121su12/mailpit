@@ -10,7 +10,7 @@ import (
 )
 
 // GetAllTags (method: GET) will get all tags currently in use
-func GetAllTags(w http.ResponseWriter, _ *http.Request) {
+func GetAllTags(w http.ResponseWriter, r *http.Request) {
 	// swagger:route GET /api/v1/tags tags GetAllTags
 	//
 	// # Get all current tags
@@ -27,7 +27,7 @@ func GetAllTags(w http.ResponseWriter, _ *http.Request) {
 	//    400: ErrorResponse
 
 	w.Header().Add("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(storage.GetAllTags()); err != nil {
+	if err := json.NewEncoder(w).Encode(storage.GetAllTags(storage.GetMailboxes(r))); err != nil {
 		httpError(w, err.Error())
 	}
 }
@@ -67,7 +67,7 @@ func SetMessageTags(w http.ResponseWriter, r *http.Request) {
 
 	ids := data.IDs
 
-	if len(ids) > 0 {
+	if !storage.HasMailboxFeature() && len(ids) > 0 {
 		for _, id := range ids {
 			if _, err := storage.SetMessageTags(id, data.Tags); err != nil {
 				httpError(w, err.Error())
@@ -113,9 +113,11 @@ func RenameTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := storage.RenameTag(tag, data.Name); err != nil {
-		httpError(w, err.Error())
-		return
+	if !storage.HasMailboxFeature() {
+		if err := storage.RenameTag(tag, data.Name); err != nil {
+			httpError(w, err.Error())
+			return
+		}
 	}
 
 	websockets.Broadcast("prune", nil)

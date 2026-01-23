@@ -10,6 +10,7 @@ import (
 
 	"github.com/axllent/mailpit/internal/auth"
 	"github.com/axllent/mailpit/internal/logger"
+	"github.com/axllent/mailpit/internal/tools"
 	"github.com/gorilla/websocket"
 )
 
@@ -119,12 +120,12 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		user, pass, ok := r.BasicAuth()
 
 		if !ok {
-			basicAuthResponse(w)
+			tools.BasicAuthResponse(w)
 			return
 		}
 
 		if !auth.UICredentials.Match(user, pass) {
-			basicAuthResponse(w)
+			tools.BasicAuthResponse(w)
 			return
 		}
 	}
@@ -141,11 +142,4 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	// Allow collection of memory referenced by the caller by doing all work in new goroutines.
 	go client.readPump()
 	go client.writePump()
-}
-
-// BasicAuthResponse returns an basic auth response to the browser
-func basicAuthResponse(w http.ResponseWriter) {
-	w.Header().Set("WWW-Authenticate", `Basic realm="Login"`)
-	w.WriteHeader(http.StatusUnauthorized)
-	_, _ = w.Write([]byte("Unauthorized.\n"))
 }

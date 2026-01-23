@@ -1,16 +1,21 @@
 package storage
 
 import (
+	"bytes"
+	"errors"
+	"net/http"
 	"net/mail"
 	"os"
 	"regexp"
 	"strings"
 	"sync"
 
+	"github.com/axllent/mailpit/config"
 	"github.com/axllent/mailpit/internal/html2text"
 	"github.com/axllent/mailpit/internal/logger"
 	"github.com/axllent/mailpit/internal/tools"
 	"github.com/jhillyerd/enmime/v2"
+	"github.com/leporo/sqlf"
 )
 
 var (
@@ -19,6 +24,58 @@ var (
 	// StatsDeleted for counting the number of messages deleted
 	StatsDeleted uint64
 )
+
+func HasMailboxFeature() bool {
+	return config.UIUserMailHeader == ""
+}
+
+// GetMailboxes resolves mailbox from request header via config.UIUserMailHeader
+func GetMailboxes(r *http.Request) []string {
+	if config.UIUserMailHeader == "" {
+		return []string{}
+	}
+
+	var h = r.Header.Get(config.UIUserMailHeader)
+	if h == "*" {
+		return []string{}
+	}
+	return []string{h}
+}
+
+// GetMailHeader check allowed TO: by parsing mail header and checking metadata from DB
+func GetMailHeader(mailbox []string, id string, reader *bytes.Reader) (*enmime.Envelope, *Metadata, error) {
+	parser := enmime.NewParser(enmime.DisableCharacterDetection(true))
+
+	env, err := parser.ReadEnvelope(reader)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	meta, err := GetMetadata(mailbox, id)
+	if err != nil {
+		meta = Metadata{}
+	}
+
+	if len(mailbox) == 0 {
+		return env, &meta, nil
+	}
+
+	tos := meta.To
+	if tos == nil {
+		toData := addressToSlice(env, "To")
+		if len(toData) > 0 {
+			tos = toData
+		} else if env.GetHeader("To") != "" {
+			tos = []*mail.Address{{Name: env.GetHeader("To")}}
+		}
+	}
+
+	if canSend(mailbox, tos) {
+		return env, &meta, nil
+	}
+
+	return nil, nil, errors.New("403")
+}
 
 // AddTempFile adds a file to the slice of files to delete on exit
 func AddTempFile(s string) {
@@ -106,4 +163,33 @@ func isFile(path string) bool {
 // Convert `%` to `%%` for SQL searches
 func escPercentChar(s string) string {
 	return strings.ReplaceAll(s, "%", "%%")
+}
+
+// mbStmtFilter adds where condition to sql statement to check allowed TO:
+func mbStmtFilter(mailbox []string, q *sqlf.Stmt) *sqlf.Stmt {
+	if len(mailbox) == 0 {
+		return q
+	}
+
+	for _, m := range mailbox {
+		q = q.Where("IFNULL(json_extract(Metadata, '$.To'), '{}') LIKE ?", "%"+escPercentChar(m)+"%")
+	}
+	return q
+}
+
+// canSend checks address for allowed TO:
+func canSend(mailbox []string, tos []*mail.Address) bool {
+	if len(mailbox) == 0 {
+		return true
+	}
+
+	for _, a := range tos {
+		for _, m := range mailbox {
+			if m == a.Address {
+				return true
+			}
+		}
+	}
+
+	return false
 }

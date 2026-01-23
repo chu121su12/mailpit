@@ -8,6 +8,7 @@ import (
 	"net/mail"
 
 	"github.com/axllent/mailpit/internal/storage"
+	"github.com/axllent/mailpit/internal/tools"
 	"github.com/gorilla/mux"
 )
 
@@ -45,7 +46,7 @@ func GetMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	msg, err := storage.GetMessage(id)
+	msg, err := storage.GetMessage(storage.GetMailboxes(r), id)
 	if err != nil {
 		fourOFour(w)
 		return
@@ -94,6 +95,12 @@ func GetHeaders(w http.ResponseWriter, r *http.Request) {
 	data, err := storage.GetMessageRaw(id)
 	if err != nil {
 		fourOFour(w)
+		return
+	}
+
+	_, err = storage.GetMessage(storage.GetMailboxes(r), id)
+	if err != nil {
+		tools.BasicAuthResponse(w)
 		return
 	}
 
@@ -147,7 +154,7 @@ func DownloadAttachment(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	a, err := storage.GetAttachmentPart(id, partID)
+	a, err := storage.GetAttachmentPart(storage.GetMailboxes(r), id, partID)
 	if err != nil {
 		fourOFour(w)
 		return
@@ -200,6 +207,12 @@ func DownloadRaw(w http.ResponseWriter, r *http.Request) {
 	data, err := storage.GetMessageRaw(id)
 	if err != nil {
 		fourOFour(w)
+		return
+	}
+
+	_, _, err = storage.GetMailHeader(storage.GetMailboxes(r), id, bytes.NewReader(data))
+	if err != nil {
+		tools.BasicAuthResponse(w)
 		return
 	}
 

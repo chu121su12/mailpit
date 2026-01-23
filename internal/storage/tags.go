@@ -139,8 +139,12 @@ func deleteMessageTag(id, name string) error {
 }
 
 // GetAllTags returns all used tags
-func GetAllTags() []string {
+func GetAllTags(mailbox []string) []string {
 	var tags = []string{}
+	if !HasMailboxFeature() {
+		return tags
+	}
+
 	var name string
 
 	if err := sqlf.
@@ -221,6 +225,9 @@ func RenameTag(from, to string) error {
 
 // DeleteTag deleted a tag and removed all references to the tag
 func DeleteTag(tag string) error {
+	if !HasMailboxFeature() {
+		return nil
+	}
 	var id int
 
 	q := sqlf.From(tenant("tags")).

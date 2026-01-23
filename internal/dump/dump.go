@@ -102,7 +102,7 @@ func loadIDs() error {
 
 		logger.Log().Debugf("Fetching messages summary from %s", config.Database)
 
-		summary, err = storage.List(0, 0, 0)
+		summary, err = storage.List([]string{}, 0, 0, 0)
 		if err != nil {
 			return err
 		}

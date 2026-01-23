@@ -131,8 +131,8 @@ func Load(detectLatestVersion bool) AppInformation {
 
 	info.Database = config.Database
 	info.DatabaseSize = storage.DbSize()
-	info.Messages = storage.CountTotal()
-	info.Unread = storage.CountUnread()
+	info.Messages = storage.CountTotal([]string{})
+	info.Unread = storage.CountUnread([]string{})
 	info.Tags = storage.GetAllTagsCount()
 
 	return info

@@ -73,7 +73,7 @@ func ReindexAll() {
 				continue
 			}
 
-			meta, _ := GetMetadata(id)
+			meta, _ := GetMetadata([]string{}, id)
 
 			fromJSON := addressToSlice(env, "From")
 			if len(fromJSON) > 0 {

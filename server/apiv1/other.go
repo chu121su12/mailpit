@@ -5,14 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/mail"
 
 	"github.com/axllent/mailpit/config"
 	"github.com/axllent/mailpit/internal/htmlcheck"
 	"github.com/axllent/mailpit/internal/linkcheck"
 	"github.com/axllent/mailpit/internal/spamassassin"
 	"github.com/axllent/mailpit/internal/storage"
+	"github.com/axllent/mailpit/internal/tools"
 	"github.com/gorilla/mux"
-	"github.com/jhillyerd/enmime/v2"
 )
 
 // HTMLCheck returns a summary of the HTML client support
@@ -55,9 +56,13 @@ func HTMLCheck(w http.ResponseWriter, r *http.Request) {
 
 	e := bytes.NewReader(raw)
 
-	parser := enmime.NewParser(enmime.DisableCharacterDetection(true))
+	msg, _, err := storage.GetMailHeader(storage.GetMailboxes(r), id, e)
+	if err != nil {
+		tools.BasicAuthResponse(w)
+		return
+	}
 
-	msg, err := parser.ReadEnvelope(e)
+	_, err = mail.ReadMessage(e)
 	if err != nil {
 		httpError(w, err.Error())
 		return
@@ -117,7 +122,7 @@ func LinkCheck(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	msg, err := storage.GetMessage(id)
+	msg, err := storage.GetMessage(storage.GetMailboxes(r), id)
 	if err != nil {
 		fourOFour(w)
 		return
@@ -174,6 +179,12 @@ func SpamAssassinCheck(w http.ResponseWriter, r *http.Request) {
 	msg, err := storage.GetMessageRaw(id)
 	if err != nil {
 		fourOFour(w)
+		return
+	}
+
+	_, _, err = storage.GetMailHeader(storage.GetMailboxes(r), id, bytes.NewReader(msg))
+	if err != nil {
+		tools.BasicAuthResponse(w)
 		return
 	}
 

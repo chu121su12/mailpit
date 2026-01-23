@@ -52,7 +52,7 @@ func LoadTagFilters() {
 			continue
 		}
 
-		tagFilters = append(tagFilters, TagFilter{Match: match, Tags: validTags, SQL: searchQueryBuilder(match, "")})
+		tagFilters = append(tagFilters, TagFilter{Match: match, Tags: validTags, SQL: searchQueryBuilder([]string{}, match, "")})
 	}
 }
 

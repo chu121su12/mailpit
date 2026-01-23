@@ -191,11 +191,11 @@ func Ping() error {
 }
 
 // StatsGet returns the total/unread statistics for a mailbox
-func StatsGet() MailboxStats {
+func StatsGet(mailbox []string) MailboxStats {
 	var (
-		total  = CountTotal()
-		unread = CountUnread()
-		tags   = GetAllTags()
+		total  = CountTotal(mailbox)
+		unread = CountUnread(mailbox)
+		tags   = GetAllTags(mailbox)
 	)
 
 	dbLastAction = time.Now()
@@ -208,10 +208,10 @@ func StatsGet() MailboxStats {
 }
 
 // CountTotal returns the number of emails in the database
-func CountTotal() uint64 {
+func CountTotal(mailbox []string) uint64 {
 	var total float64 // use float64 for rqlite compatibility
 
-	_ = sqlf.From(tenant("mailbox")).
+	_ = mbStmtFilter(mailbox, sqlf.From(tenant("mailbox"))).
 		Select("COUNT(*)").To(&total).
 		QueryRowAndClose(context.TODO(), db)
 
@@ -219,10 +219,10 @@ func CountTotal() uint64 {
 }
 
 // CountUnread returns the number of emails in the database that are unread.
-func CountUnread() uint64 {
+func CountUnread(mailbox []string) uint64 {
 	var total float64 // use float64 for rqlite compatibility
 
-	_ = sqlf.From(tenant("mailbox")).
+	_ = mbStmtFilter(mailbox, sqlf.From(tenant("mailbox"))).
 		Select("COUNT(*)").To(&total).
 		Where("Read = ?", 0).
 		QueryRowAndClose(context.TODO(), db)
@@ -231,10 +231,10 @@ func CountUnread() uint64 {
 }
 
 // CountRead returns the number of emails in the database that are read.
-func CountRead() uint64 {
+func CountRead(mailbox []string) uint64 {
 	var total float64 // use float64 for rqlite compatibility
 
-	_ = sqlf.From(tenant("mailbox")).
+	_ = mbStmtFilter(mailbox, sqlf.From(tenant("mailbox"))).
 		Select("COUNT(*)").To(&total).
 		Where("Read = ?", 1).
 		QueryRowAndClose(context.TODO(), db)
@@ -256,10 +256,10 @@ func DbSize() uint64 {
 }
 
 // MessageIDExists checks whether a Message-ID exists in the DB
-func MessageIDExists(id string) bool {
+func MessageIDExists(mailbox []string, id string) bool {
 	var total int
 
-	_ = sqlf.From(tenant("mailbox")).
+	_ = mbStmtFilter(mailbox, sqlf.From(tenant("mailbox"))).
 		Select("COUNT(*)").To(&total).
 		Where("MessageID = ?", id).
 		QueryRowAndClose(context.TODO(), db)

@@ -295,7 +295,7 @@ func setup() {
 		panic(err)
 	}
 
-	if err := storage.DeleteAllMessages(); err != nil {
+	if err := storage.DeleteAllMessages([]string{}); err != nil {
 		panic(err)
 	}
 
@@ -384,7 +384,7 @@ func insertEmailData(t *testing.T) {
 
 		bufBytes := buf.Bytes()
 
-		id, err := storage.Store(&bufBytes, nil)
+		id, err := storage.Store([]string{}, &bufBytes, nil)
 		if err != nil {
 			t.Log("error ", err)
 			t.Fail()

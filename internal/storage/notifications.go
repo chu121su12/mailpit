@@ -13,7 +13,7 @@ var bcStatsDelay = false
 // displayed to the web UI, as well as the total unread messages.
 // The lookup is very fast (< 10ms / 100k messages under load).
 // Rate limited to 4x per second.
-func BroadcastMailboxStats() {
+func BroadcastMailboxStats(mailbox []string) {
 	if bcStatsDelay {
 		return
 	}
@@ -28,8 +28,8 @@ func BroadcastMailboxStats() {
 			Unread  uint64
 			Version string
 		}{
-			Total:   CountTotal(),
-			Unread:  CountUnread(),
+			Total:   CountTotal(mailbox),
+			Unread:  CountUnread(mailbox),
 			Version: config.Version,
 		}
 

@@ -220,7 +220,7 @@ func getAssets(id string) ([]string, error) {
 		return result.Assets, nil
 	}
 
-	msg, err := storage.GetMessage(id)
+	msg, err := storage.GetMessage([]string{}, id)
 	if err != nil {
 		return nil, err
 	}

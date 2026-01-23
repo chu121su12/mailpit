@@ -2,9 +2,17 @@ package tools
 
 import (
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 )
+
+// BasicAuthResponse returns a basic auth response to the browser
+func BasicAuthResponse(w http.ResponseWriter) {
+	w.Header().Set("WWW-Authenticate", `Basic realm="Login"`)
+	w.WriteHeader(http.StatusUnauthorized)
+	_, _ = w.Write([]byte("Unauthorized.\n"))
+}
 
 // Plural returns a singular or plural of a word together with the total
 func Plural(total int, singular, plural string) string {
